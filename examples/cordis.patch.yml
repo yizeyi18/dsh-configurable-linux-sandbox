@@ -1,0 +1,46 @@
+# Replace the built-in local sandbox provider with new-linux-sandbox.
+#
+# Prerequisites:
+#   1. Build this package:      npm --prefix new-linux-sandbox run build
+#   2. Make `new-linux-sandbox` resolvable from the profile's package tree
+#      together with its peer dependencies (@deepseek-ai/dsh-sandbox,
+#      @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-projection,
+#      @deepseek-ai/dsh-llm, @deepseek-ai/cordis).
+#   3. Copy this file over (or merge it into) the profile's cordis.patch.yml.
+#
+# The built-in `sandbox` row is disabled rather than renamed because a patch
+# cannot replace an entry's plugin name. The inserted row takes over the
+# `ctx.sandbox` service.
+
+- id: sandbox
+  disabled: true
+
+- insert:
+    - id: sandbox-linux
+      name: new-linux-sandbox
+      config:
+        # Extra writable directories outside the workspace. These are dropped
+        # to read-only when the session runs in `read-only` mode. Entries must
+        # be physical paths; symlinked grants are rejected.
+        read_write:
+          - /home/me/.cache/uv
+          - /home/me/projects/shared
+
+        # Extra read-only directories. These stay visible in both modes.
+        read_only:
+          - /home/me/datasets
+          - /var/log
+
+        # Hide these directories behind an empty tmpfs. Deeper entries above
+        # still re-expose their own subtrees.
+        forbidden:
+          - /home/me
+
+        # Character/block device nodes or paths under /dev, exposed with
+        # --dev-bind. Device access is outside the file modes; keep this list
+        # minimal.
+        dev:
+          - /dev/dri
+
+        # Positive timeout for the one functional bwrap probe.
+        probeTimeoutMs: 5000
