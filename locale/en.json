@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Configurable Linux sandbox",
+    "description": "Linux bwrap sandbox with read_write, read_only, forbidden, and dev mounts, per-session overrides in the Web UI, and mount-aware filesystem tools."
+  }
+}

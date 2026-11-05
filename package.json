@@ -1,8 +1,14 @@
 {
-  "name": "new-linux-sandbox",
+  "name": "dsh-configurable-linux-sandbox",
   "version": "0.1.0",
-  "description": "A configurable Linux bwrap sandbox provider for DeepSeek Harness: four mount-intent keys, global and per-session configuration",
-  "private": true,
+  "description": "Configurable Linux bwrap sandbox bundle for DeepSeek Harness: read_write/read_only/forbidden/dev mounts, per-session overrides, mount-aware filesystem tools, and a Web UI",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "sandbox",
+    "bwrap",
+    "linux"
+  ],
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
@@ -11,11 +17,20 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
+    "lib/client.js",
     "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "locale/*.json",
     "README.md",
     "README.zh.md"
   ],
@@ -26,15 +41,59 @@
     "link": "sh scripts/link-local-deps.sh"
   },
   "engines": {
-    "node": ">=24.9"
+    "node": ">=24.9",
+    "dsh": "^0.2.2-rc.1"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml",
+      "platforms": [
+        "linux"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.1.0 <5",
+    "@deepseek-ai/dsh-fs": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-fs-local": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-fs-sandbox": ">=0.2.2-rc.1 <0.3",
     "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1 <0.3",
     "@deepseek-ai/dsh-sandbox": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.2-rc.1 <0.3",
     "@deepseek-ai/dsh-session": ">=0.2.2-rc.1 <0.3",
     "@deepseek-ai/dsh-session-projection": ">=0.2.2-rc.1 <0.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": ">=4.1.0 <5",
+    "@deepseek-ai/dsh-agent": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-ui-session": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-fs": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-fs-local": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-fs-sandbox": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-sandbox": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-session": ">=0.2.2-rc.1 <0.3",
+    "@deepseek-ai/dsh-session-projection": ">=0.2.2-rc.1 <0.3",
+    "react": "^18.2.0"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.19.0",

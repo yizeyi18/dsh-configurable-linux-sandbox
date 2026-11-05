@@ -7,7 +7,7 @@
  * before bwrap starts, so a broken or contradictory grant never reaches a
  * runner.
  *
- * @module new-linux-sandbox/paths
+ * @module dsh-configurable-linux-sandbox/paths
  */
 
 import { realpathSync, statSync } from 'node:fs'

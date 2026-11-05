@@ -1,6 +1,13 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable",
+      "ESNext.Disposable"
+    ],
     "rootDir": "src",
     "outDir": "lib/types"
   },
@@ -18,13 +25,58 @@
       "path": "../packages/llm/llm"
     },
     {
+      "path": "../packages/sandbox/sandbox"
+    },
+    {
+      "path": "../packages/sandbox/sandbox-policy"
+    },
+    {
       "path": "../packages/core/session"
+    },
+    {
+      "path": "../packages/core/agent"
     },
     {
       "path": "../packages/session/session-projection"
     },
     {
-      "path": "../packages/sandbox/sandbox"
+      "path": "../packages/fs/fs"
+    },
+    {
+      "path": "../packages/fs/fs-local"
+    },
+    {
+      "path": "../packages/fs/fs-sandbox"
+    },
+    {
+      "path": "../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../packages/client/connection/tsconfig.client.json"
+    },
+    {
+      "path": "../packages/client/locale/tsconfig.host.json"
+    },
+    {
+      "path": "../packages/client/locale/tsconfig.client.json"
+    },
+    {
+      "path": "../packages/client/ui-slots"
+    },
+    {
+      "path": "../packages/client/ui-primitives"
+    },
+    {
+      "path": "../packages/client/ui-renderer"
+    },
+    {
+      "path": "../packages/client/ui-session"
+    },
+    {
+      "path": "../packages/client/ui-conversation/tsconfig.host.json"
+    },
+    {
+      "path": "../packages/client/ui-conversation/tsconfig.client.json"
     }
   ]
 }

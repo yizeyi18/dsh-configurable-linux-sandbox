@@ -13,14 +13,13 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
-import SessionStore from '@deepseek-ai/dsh-session'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import LinuxBwrapSandboxProvider, { setSessionMountConfig } from '../src/index.ts'
+import { setSessionMountConfig } from '../src/index.ts'
 import { bwrapProbeArgs } from '../src/mounts.ts'
 import type { Config } from '../src/index.ts'
-import { cleanupDirs, makeDir } from './support.ts'
+import type { LinuxBwrapSandboxProvider } from '../src/provider.ts'
+import { cleanupDirs, makeDir, mountProvider } from './support.ts'
 
 const probe = spawnSync('bwrap', [...bwrapProbeArgs(), '--', 'true'], { timeout: 5_000, stdio: 'ignore' })
 const bwrapUsable = probe.status === 0
@@ -33,12 +32,9 @@ afterAll(async () => {
 })
 
 async function realProvider(config: Config = {}) {
-  const ctx = new Context()
-  contexts.push(ctx)
-  await ctx.plugin(SessionStore)
-  await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(LinuxBwrapSandboxProvider, config)
-  return { ctx, provider: ctx.sandbox as LinuxBwrapSandboxProvider }
+  const bench = await mountProvider(config, { realProbe: true })
+  contexts.push(bench.ctx)
+  return bench
 }
 
 /** Confine and execute one shell command; never stub the probe in this suite. */
@@ -63,12 +59,12 @@ function workspacePolicy(workspaceRoot: string): SandboxPolicy {
   return { mode: 'workspace-write', workspaceRoot }
 }
 
-describe.skipIf(!bwrapUsable)('new-linux-sandbox: real bwrap confinement', () => {
+describe.skipIf(!bwrapUsable)('dsh-configurable-linux-sandbox: real bwrap confinement', () => {
   it('grants read_write, enforces read_only, hides forbidden content, and binds devices', async () => {
-    const workspace = makeDir('new-linux-sandbox-e2e-ws-')
-    const readWrite = makeDir('new-linux-sandbox-e2e-rw-')
-    const readOnly = makeDir('new-linux-sandbox-e2e-ro-')
-    const forbidden = makeDir('new-linux-sandbox-e2e-hidden-')
+    const workspace = makeDir('dsh-configurable-linux-sandbox-e2e-ws-')
+    const readWrite = makeDir('dsh-configurable-linux-sandbox-e2e-rw-')
+    const readOnly = makeDir('dsh-configurable-linux-sandbox-e2e-ro-')
+    const forbidden = makeDir('dsh-configurable-linux-sandbox-e2e-hidden-')
     const devPath = existsSync('/dev/dri') ? '/dev/dri' : existsSync('/dev/shm') ? '/dev/shm' : undefined
     writeFileSync(join(readOnly, 'readable'), 'readable')
     writeFileSync(join(forbidden, 'secret'), 'secret')
@@ -109,14 +105,14 @@ describe.skipIf(!bwrapUsable)('new-linux-sandbox: real bwrap confinement', () =>
       expect(deviceRead.result.status).toBe(0)
     }
 
-    const ephemeral = join('/tmp', `new-linux-sandbox-e2e-${process.pid}-${Date.now()}`)
+    const ephemeral = join('/tmp', `dsh-configurable-linux-sandbox-e2e-${process.pid}-${Date.now()}`)
     const tmpWrite = await run(provider, `printf ok > ${quote(ephemeral)}`, policy)
     expect(tmpWrite.result.status).toBe(0)
     expect(existsSync(ephemeral)).toBe(false)
   })
 
   it('denies writes to the workspace under read-only while keeping it readable', async () => {
-    const workspace = makeDir('new-linux-sandbox-e2e-ws-')
+    const workspace = makeDir('dsh-configurable-linux-sandbox-e2e-ws-')
     const file = join(workspace, 'existing.txt')
     writeFileSync(file, 'existing')
     const { provider } = await realProvider()
@@ -131,13 +127,13 @@ describe.skipIf(!bwrapUsable)('new-linux-sandbox: real bwrap confinement', () =>
   })
 
   it('re-exposes a read-only subtree under a forbidden ancestor', async () => {
-    const parent = makeDir('new-linux-sandbox-e2e-parent-')
+    const parent = makeDir('dsh-configurable-linux-sandbox-e2e-parent-')
     const open = join(parent, 'open')
     mkdirSync(open)
     writeFileSync(join(open, 'visible'), 'visible')
     writeFileSync(join(parent, 'secret'), 'secret')
     const { provider } = await realProvider({ forbidden: [parent], read_only: [open] })
-    const workspace = makeDir('new-linux-sandbox-e2e-ws-')
+    const workspace = makeDir('dsh-configurable-linux-sandbox-e2e-ws-')
     const policy = workspacePolicy(workspace)
 
     const visible = await run(provider, `cat ${quote(join(open, 'visible'))}`, policy)
@@ -150,7 +146,7 @@ describe.skipIf(!bwrapUsable)('new-linux-sandbox: real bwrap confinement', () =>
   })
 
   it('runs in a private PID namespace', async () => {
-    const workspace = makeDir('new-linux-sandbox-e2e-ws-')
+    const workspace = makeDir('dsh-configurable-linux-sandbox-e2e-ws-')
     const { provider } = await realProvider()
     const hostNamespace = readlinkSync('/proc/self/ns/pid')
     const result = await run(provider, 'readlink /proc/self/ns/pid', workspacePolicy(workspace))
@@ -160,8 +156,8 @@ describe.skipIf(!bwrapUsable)('new-linux-sandbox: real bwrap confinement', () =>
   })
 
   it('applies a session-scoped read_write grant to that session only', async () => {
-    const workspace = makeDir('new-linux-sandbox-e2e-ws-')
-    const grant = makeDir('new-linux-sandbox-e2e-session-')
+    const workspace = makeDir('dsh-configurable-linux-sandbox-e2e-ws-')
+    const grant = makeDir('dsh-configurable-linux-sandbox-e2e-session-')
     const { ctx, provider } = await realProvider()
     const session = ctx.sessions.create()
     const other = ctx.sessions.create()

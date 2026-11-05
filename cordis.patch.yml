@@ -1,0 +1,34 @@
+# dsh-configurable-linux-sandbox bundle patch.
+#
+# Replaces the shipped process sandbox and filesystem sandbox with one plugin
+# that enforces the same four mount-intent keys in both places, and carries the
+# Web Client half that edits a session's override.
+#
+# The bundle is Linux-only (`dsh.bundle.platforms`), so a non-Linux Host skips
+# this whole layer and keeps the built-in providers.
+
+# `sandbox` and `fs-sandbox` cannot be retargeted by a patch (a non-insert
+# patch's `name` is an assertion, not an override), so disable them and insert
+# the replacement under a new id.
+- id: sandbox
+  disabled: true
+
+- id: fs-sandbox
+  disabled: true
+
+- insert:
+    - id: configurable-sandbox
+      name: dsh-configurable-linux-sandbox
+      config:
+        # Global defaults. Edit this row in your profile patch to grant extra
+        # paths; a session can override any key from the Session-header button.
+        #
+        # read_write:
+        #   - /home/me/.cache/uv
+        # read_only:
+        #   - /home/me/datasets
+        # forbidden:
+        #   - /home/me/.ssh
+        # dev:
+        #   - /dev/dri
+        probeTimeoutMs: 5000

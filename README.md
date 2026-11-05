@@ -1,103 +1,117 @@
-# new-linux-sandbox
+# dsh-configurable-linux-sandbox
 
 English | [中文](README.zh.md)
 
-A configurable, Linux-only bwrap sandbox provider for DeepSeek Harness, packaged as a Cordis plugin.
-
-This is the phase-one prototype requested for finer-grained file sandboxing. It mounts the same system resources as the built-in local sandbox — a read-only host root, a fresh `/dev`, and a private PID namespace with its own `/proc` — and adds four mount-intent keys that the built-in three-mode policy cannot express:
+A Linux-only DeepSeek Harness bundle that replaces the built-in process sandbox **and** filesystem sandbox with one mount-aware pair, configured by four keys and editable per session from the Web UI.
 
 | Key | Meaning |
 |---|---|
 | `read_write` | Host directories outside the workspace exposed read-write under `workspace-write` (read-only under `read-only`). |
 | `read_only` | Host directories outside the workspace exposed read-only in every mode. |
-| `forbidden` | Host directories hidden by an empty tmpfs, so their contents are invisible inside the sandbox. |
-| `dev` | Host device nodes or device directories under `/dev`, exposed with bwrap `--dev-bind`, for example `/dev/dri` for GPU access. |
+| `forbidden` | Host directories hidden behind an empty tmpfs in the process sandbox and denied/filtered by the filesystem provider. |
+| `dev` | Character/block device nodes or paths under `/dev` exposed with bwrap `--dev-bind`, for example `/dev/dri` for GPU access. |
 
-The intent is configurable at two scopes: the plugin row's global configuration and a durable per-session override. Mounts follow prefix semantics regardless of scope: a deeper path wins over a shallower one, so a `forbidden` parent can hide a directory while a `read_only` child re-exposes one subtree.
+The deployment config lives on the bundle's one plugin row. Every session can override any key from a Session-header button; the override is a durable session plugin record and applies to the next confined command and the next filesystem operation.
 
 ## Table of Contents
 
-- [Status and requirements](#status-and-requirements)
+- [Requirements](#requirements)
+- [Install](#install)
 - [Configure the deployment](#configure-the-deployment)
-- [Configure one session](#configure-one-session)
+- [Configure one session in the Web UI](#configure-one-session-in-the-web-ui)
+- [What is enforced](#what-is-enforced)
 - [Mount order and precedence](#mount-order-and-precedence)
 - [Isolation and security notes](#isolation-and-security-notes)
-- [Build and test](#build-and-test)
-- [Known limitations and next phase](#known-limitations-and-next-phase)
+- [Build, test, and publish](#build-test-and-publish)
+- [Known limitations](#known-limitations)
 
-## Status and requirements
+## Requirements
 
-Phase one is a standalone package, not part of the repository workspace. It requires:
+- Linux (`process.platform === 'linux'`); the bundle declares `dsh.bundle.platforms: ["linux"]`, so other hosts skip it and keep the built-in providers.
+- A base-backed Harness profile (`web`, `headless`, `sdk`, or `acp`). The bundle's patch disables the shipped `sandbox` and `fs-sandbox` rows and inserts its own row; do not install it into a composition that already mounts another `ctx.sandbox` or `ctx.fs` provider.
+- `bwrap` on `PATH` with permission to create its namespaces. A functional probe runs once per provider lifetime; an unusable bwrap fails closed with `SANDBOX_UNAVAILABLE`.
+- DeepSeek Harness `^0.2.2-rc.1` (enforced by `engines.dsh` and the DSH peer ranges).
 
-- Linux `process.platform === 'linux'`; the plugin constructor refuses to load on any other host.
-- `bwrap` on `PATH`, able to create its namespaces. A functional probe runs once per provider lifetime; an unusable bwrap fails closed with `SANDBOX_UNAVAILABLE` and the command never starts.
-- The DeepSeek Harness packages listed as peer dependencies, resolvable from the profile that mounts the plugin.
-- The prototype is nested in a checkout: its `tsconfig.json` and `vitest.config.ts` reference the checkout root for source resolution, so building and testing require that layout.
-- Node.js 24.9 or later to build and test in this checkout.
+## Install
 
-The provider reports `enforcement: 'full'` for every wrap: the bwrap mounts govern every promised file effect. Device access is not a file effect and is governed separately by the `dev` key (see [Isolation and security notes](#isolation-and-security-notes)).
+From npm, after the package is published:
+
+```sh
+dsh plugin --profile web add dsh-configurable-linux-sandbox
+```
+
+Restart the profile. The bundle layer is appended after the base and Web layers, so its patch disables `sandbox` and `fs-sandbox` and inserts the `configurable-sandbox` row. Turn the whole bundle off to restore the built-ins; disabling only the inserted row leaves the profile without a process or filesystem provider.
+
+For development from this checkout, build and install the package into a profile as a local link:
+
+```sh
+npm --prefix dsh-configurable-linux-sandbox run build
+dsh plugin --profile web add link:/absolute/path/to/dsh-configurable-linux-sandbox
+```
+
+The profile row must name the package (the bundle patch does this) so the client-module scan can find its `dsh.client` half. An absolute `lib/index.js` row is useful for Host-only debugging but does not load the Web UI, because subpath/file rows are not client rows. [`scripts/link-local-deps.sh`](scripts/link-local-deps.sh) additionally links this checkout's runtime peers into the package for direct Host loading; a packaged installation resolves its declared peers normally.
 
 ## Configure the deployment
 
-Mount the plugin in place of the built-in local provider. A profile patch disables the shipped `sandbox` row and inserts the new provider under a new id:
+The bundle row's config is the deployment-wide mount intent:
 
 ```yaml
-# $DSH_HOME/profiles/<name>/cordis.patch.yml
-- id: sandbox
-  disabled: true
-- insert:
-    - id: sandbox-linux
-      name: new-linux-sandbox
-      config:
-        read_write:
-          - /home/me/.cache/uv
-          - /home/me/projects/shared
-        read_only:
-          - /home/me/datasets
-          - /var/log
-        forbidden:
-          - /home/me
-        dev:
-          - /dev/dri
-        probeTimeoutMs: 5000
+- id: configurable-sandbox
+  config:
+    read_write:
+      - /home/me/.cache/uv
+      - /home/me/projects/shared
+    read_only:
+      - /home/me/datasets
+      - /var/log
+    forbidden:
+      - /home/me
+    dev:
+      - /dev/dri
+    probeTimeoutMs: 5000
 ```
 
-The example deliberately combines `forbidden: ['/home/me']` with grants under that directory: the tmpfs hides `/home/me`, then the deeper `read_write` and `read_only` entries re-expose their own subtrees. `read_write` entries must be physical paths (no symlinked grant); `read_only`, `forbidden`, and `dev` entries are canonicalized.
-
-A full example lives in [`examples/cordis.patch.yml`](examples/cordis.patch.yml). The inserted `name` must resolve from the profile's package tree, so install or link the built package there before starting the profile.
-
-### Field reference
+A profile patch replaces the whole row config, so restate every field you keep. [`examples/cordis.patch.yml`](examples/cordis.patch.yml) is a complete example.
 
 | Field | Default | Meaning |
 |---|---|---|
-| `read_write` | `[]` | Absolute physical directories. Dropped to read-only under `read-only`; bind-mounted read-write under `workspace-write`. |
-| `read_only` | `[]` | Absolute directories. Always bind-mounted read-only. |
-| `forbidden` | `[]` | Absolute directories. Mounted as an empty tmpfs; a deeper entry can re-expose a subtree. |
+| `read_write` | `[]` | Absolute physical directories. Read-write under `workspace-write`; read-only under `read-only`. |
+| `read_only` | `[]` | Absolute directories exposed read-only in every mode. |
+| `forbidden` | `[]` | Absolute directories hidden by an empty tmpfs; the filesystem provider denies reads under them. A deeper entry can re-expose a subtree. |
 | `dev` | `[]` | Absolute character/block device nodes or paths under `/dev`. Always `--dev-bind`, in both file modes. |
 | `probeTimeoutMs` | `5000` | Positive timeout for the one functional bwrap probe. |
 
-Path rules are enforced before bwrap starts:
+Path rules are enforced before any command or filesystem operation:
 
-- Every entry is absolute, NUL-free, and must exist when the command is confined.
-- `read_write`, `read_only`, and `forbidden` require directories. `dev` accepts character/block device nodes and existing paths under `/dev` (device nodes or device directories); regular files, sockets, and arbitrary directories elsewhere are rejected.
-- `read_write` must be spelled as its physical path (`realpath`), so validation and the bind name the same physical directory; an alias that exists at validation time is rejected, and a path swapped after validation remains a residual path-based race. The other keys resolve aliases.
-- Listing `/` is rejected in every key; the base profile owns the root mount. `/dev`, `/proc`, and every path under `/proc` are reserved base mounts and are rejected in every key. Paths under `/dev` are accepted only by `dev`, so device exposure has one door.
-- The same physical path may not appear in two keys. One path may appear in one key and as an ancestor/descendant of another; depth order decides the effective mount.
-- A path that is listed but has disappeared fails the confined call with `LINUX_SANDBOX_INVALID_CONFIG`.
+- Every entry is absolute, NUL-free, and must exist.
+- `read_write`, `read_only`, and `forbidden` require directories; `dev` accepts character/block devices and existing paths under `/dev` (device nodes or device directories).
+- `read_write` must be spelled as its physical path (`realpath`); an alias present at validation time is rejected so the bind or containment check names the checked directory. The other keys canonicalize aliases.
+- `/` is rejected in every key. `/dev`, `/proc`, and every path under `/proc` are reserved base mounts; `/dev` descendants are accepted only by `dev`. A workspace root under `/dev` or `/proc` is rejected too.
+- The same physical path may not appear in two keys. Ancestor/descendant overlaps are allowed and resolved by depth order.
+- A configured path that disappears fails the next operation with `LINUX_SANDBOX_INVALID_CONFIG` rather than silently widening or narrowing the policy.
 
-## Configure one session
+## Configure one session in the Web UI
 
-Session scope is durable: the override is a `plugin:new-linux-sandbox/mounts` plugin record folded by the host-only `sandboxLinuxMounts` projection. The record is `ignorable` for readers that do not know this package, so current-format readers retain and skip it instead of refusing the log; this plugin folds it on replay, while format migrations retain plugin records only best-effort. It belongs to exactly one session and is never part of the model transcript. A stored record that fails validation makes confined calls fail closed instead of silently falling back to the global configuration.
+Open a session and click the gear button in the Session header. The modal shows the session mode, workspace, and one section per key:
+
+- The **Override** checkbox includes that key in the session override; when unchecked, the deployment list applies and is shown read-only.
+- Paths are individual rows with add/remove controls, so a path containing commas or spaces needs no encoding.
+- **Save** writes the checked keys; an empty checked list clears that key for the session.
+- **Reset to global** appends an empty override, returning the session to the deployment configuration.
+
+The change applies to the next confined command and the next filesystem operation. It is durable: Save appends a `plugin:dsh-configurable-linux-sandbox/mounts` plugin record, which the Host folds on replay. The form uses an authenticated, owner-only route on the existing `/api` channel (`GET`/`POST /api/dsh-configurable-linux-sandbox/mounts`); it is not a new public API.
+
+Host code can use the same write path:
 
 ```ts
 import type { Session } from '@deepseek-ai/dsh-session'
-import { setSessionMountConfig } from 'new-linux-sandbox'
+import { setSessionMountConfig } from 'dsh-configurable-linux-sandbox'
 
-function grantGpuAndDocs(session: Session): void {
+function configureResearchSession(session: Session): void {
   setSessionMountConfig(session, {
     read_write: ['/home/me/.cache/huggingface'],
     read_only: ['/home/me/datasets'],
-    forbidden: ['/home/me/.ssh'],
+    forbidden: ['/home/me'],
     dev: ['/dev/dri'],
   })
 }
@@ -105,20 +119,24 @@ function grantGpuAndDocs(session: Session): void {
 
 Semantics:
 
-- Each call appends one record carrying the complete session override. The last record wins; two sessions never share state.
-- A key present in the event replaces the global list for that key. An omitted key inherits the global list.
-- An explicit empty array clears one global key for that session.
-- `setSessionMountConfig(session, {})` returns the session to the deployment configuration.
-- The write path validates paths are absolute and well-formed before appending; filesystem existence and availability are rechecked at each confined call, so a deleted directory fails closed rather than silently widening or narrowing the policy.
-- Keys are replaced independently, so narrowing an inherited grant to read-only requires clearing the other key: global `read_write: [X]` plus session `{ read_write: [], read_only: [X] }` works, while `{ read_only: [X] }` alone collides with the inherited `read_write: [X]` and fails closed.
-- A session override cannot remove the policy's `additionalWritableRoots`; those are seam-level grants appended under `workspace-write` after the session and global lists.
-- A confined call whose policy names a session the live store no longer holds fails with `LINUX_SANDBOX_SESSION_UNAVAILABLE`; it never falls back to the global configuration. This provider needs the live `Session` object to read the projection, so a policy carrying `sessionId` cannot be served for a detached session.
+- Each call appends one complete session override; the last record wins and two sessions never share state.
+- A key present in the override replaces the deployment list for that key; an omitted key inherits the deployment list.
+- An explicit empty array clears one deployment key for that session; `setSessionMountConfig(session, {})` resets all keys.
+- Keys are independent, so narrowing an inherited grant requires clearing the other key: deployment `read_write: [X]` plus session `{ read_write: [], read_only: [X] }` works, while `{ read_only: [X] }` alone collides with the inherited `read_write: [X]` and fails closed.
+- The phase-one record name `plugin:new-linux-sandbox/mounts` is still folded for existing sessions; new writes use the new name.
+- A stored record whose payload fails validation makes the session's confined calls and filesystem operations fail closed instead of falling back to the deployment configuration.
 
-There is no Web UI or tool for this write path in phase one. A host UI, a tool plugin, or a session bootstrap can call it with a `Session` it already owns.
+## What is enforced
+
+**Processes (`ctx.sandbox`).** The provider returns `bwrap` plus the built-in isolation prefix, then the ordered mounts. `workspace-write` binds the workspace and configured `read_write` paths writable and adds an ephemeral `/tmp`; `read-only` binds the workspace and `read_write` paths read-only. `forbidden` paths become empty tmpfs mounts, and `dev` paths use `--dev-bind`. Extra writable roots from `ctx.sandboxPolicy` are appended under `workspace-write` and grant nothing under `read-only`.
+
+**Filesystem tools (`ctx.fs`).** The bundle replaces `dsh-fs-sandbox` with a provider that extends the same sandboxed backend. Mutations keep the deployment mode, workspace, `additionalWritableRoots`, and temp-area fence, and additionally deny writes under `forbidden` or `read_only` paths; `read_write` paths are added to the per-call writable roots. Reads, `stat`, `lstat`, `listDir`, `resolve`, and `watch` deny or filter `forbidden` paths, so the `read`, `write`, `edit`, `patch`, `delete`, `move`, and list tools share one boundary. Reads resolve the calling session from the Agent initiator scope; mutations trust the policy's `sessionId`.
+
+`ctx.fs.sandboxMode` reports the deployment default mode, so `tool-fs` still advertises `sandbox_permissions` and escalation. An approved escalation is honored: `danger-full-access` skips mount fencing, as the process sandbox is not invoked in that mode.
 
 ## Mount order and precedence
 
-The returned argv starts with `bwrap`, then the built-in isolation prefix, then mounts sorted by path depth and then by path:
+The returned process argv starts with `bwrap`, then the built-in isolation prefix, then mounts sorted by path depth and path:
 
 ```text
 bwrap
@@ -130,9 +148,9 @@ bwrap
 <effective mounts: shallower paths first, deeper paths override>
 ```
 
-`workspace` is always mounted once — read-write under `workspace-write`, read-only under `read-only` — so a `forbidden` ancestor cannot hide the session's own cwd. Under `workspace-write` an ephemeral `--tmpfs /tmp` is added after the base prefix unless an explicit entry (in any key) already names `/tmp`. Extras from the policy's `additionalWritableRoots` are appended to the writable set under `workspace-write` and grant nothing under `read-only`, matching the seam contract.
+The workspace is always mounted — writable under `workspace-write`, read-only under `read-only` — so a `forbidden` ancestor cannot hide the session's own cwd. The filesystem provider uses the same effective mount list without the ephemeral `/tmp`, so both enforcement paths resolve a path to the same deepest entry.
 
-Depth ordering is the whole precedence rule. Examples:
+Depth ordering is the whole precedence rule:
 
 ```yaml
 # Hide the home tree but keep two subtrees.
@@ -145,71 +163,66 @@ read_write: [/home/me/projects]
 read_only: [/home/me/projects/vendor]
 ```
 
-Contradictory same-path declarations (`read_write` and `forbidden` for the same physical path, two keys naming the workspace, or a policy extra root that contradicts a configured `forbidden` entry) fail before the runner starts.
+Contradictory same-path declarations fail before the runner starts. A policy `additionalWritableRoots` entry that contradicts a configured `forbidden` path is rejected rather than silently resolved.
 
 ## Isolation and security notes
 
-The isolation prefix mirrors the built-in Linux profile: a read-only host root, a fresh `/dev`, a private PID namespace, and a `/proc` mounted from that namespace. Network, UTS, IPC, and cgroup namespaces stay shared with the host; the sandbox shares the host kernel, user, and filesystem. It confines file effects, not network or process visibility.
-The fresh `/dev` contains only bwrap's minimal device set, so host paths such as `/dev/dri` or `/dev/shm` are absent until listed under `dev`.
+The process profile mirrors the built-in Linux sandbox: a read-only host root, a fresh `/dev`, a private PID namespace, and a `/proc` mounted from that namespace. Network, UTS, IPC, and cgroup namespaces stay shared with the host; the sandbox shares the host kernel, user, and filesystem. It confines file effects, not network or process visibility. The fresh `/dev` contains only bwrap's minimal device set, so host paths such as `/dev/dri` or `/dev/shm` are absent until listed under `dev`.
 
-`dev` uses `--dev-bind`, which allows device access. Device access is not a file effect: the two file modes do not gate it, and an exposed device (or a writable `/dev`-tree path such as `/dev/shm`) can write memory or storage outside the mounted file policy. The provider restricts the key to character/block devices and paths under `/dev`, but that is a kind check, not a capability check: treat `dev` as an explicit operator grant and keep its list minimal. GPU passthrough usually needs only `/dev/dri`.
+`dev` uses `--dev-bind`, which allows device access. Device access is not a file effect: the two file modes do not gate it, and an exposed device (or a writable `/dev`-tree path such as `/dev/shm`) can write memory or storage outside the mounted file policy. The provider restricts the key to character/block devices and paths under `/dev`, but that is a kind check, not a capability check. Treat `dev` as an explicit operator grant and keep its list minimal.
 
-Like every same-world mount sandbox, this is path-based confinement. A device, an inherited file descriptor, a hard link created while an ancestor was writable, or a kernel interface outside the mounted filesystem can bypass path-level intent. The provider does not claim otherwise.
+Like every same-world sandbox, this is path-based confinement. A device, an inherited file descriptor, a hard link created while an ancestor was writable, or a kernel interface outside the mounted filesystem can bypass path-level intent. The provider does not claim otherwise.
 
-Phase one wraps processes only. The repository's filesystem tools are governed by their own fs enforcement; `read_write` grants here apply to confined processes (bash and other `ctx.sandbox` consumers), not to separate fs-tool policy. Wiring the same intent into the fs seam is phase-two work.
+The filesystem provider is a trusted-code fence over model-controlled paths, not a kernel boundary: reads are denied by the Host process, while untrusted code confinement remains the process sandbox's job.
 
-## Build and test
+## Build, test, and publish
 
-From the repository checkout root:
-
-```sh
-npm --prefix new-linux-sandbox run typecheck
-npm --prefix new-linux-sandbox run test
-npm --prefix new-linux-sandbox run build
-```
-
-`test` runs the unit and Cordis-composition suites plus a real-bwrap e2e suite. The e2e suite self-skips when the host cannot create the namespaces, matching the repository's own bwrap tests; restricted hosts (for example containers with AppArmor-restricted unprivileged user namespaces) skip the e2e cases while the argv, lifecycle, and session suites still run.
-
-The build emits `lib/types/` (declarations and JavaScript from `tsc -b`) and bundles the plugin entry into `lib/index.js` with tsdown. Harness packages, `zod`, and `@deepseek-ai/schemastery` stay external.
-
-To load the built plugin by absolute path from this checkout without installing it into a profile, link the checkout's peer packages into the package's own `node_modules`:
+From the checkout root:
 
 ```sh
-npm --prefix new-linux-sandbox run link
+npm --prefix dsh-configurable-linux-sandbox run typecheck
+npm --prefix dsh-configurable-linux-sandbox run test
+npm --prefix dsh-configurable-linux-sandbox run build
 ```
 
-The inserted row may then name the built entry directly:
+`test` runs unit, Cordis-composition, filesystem-enforcement, Web-route, client-render, and bundle-composition suites plus a real-bwrap e2e suite. The e2e suite self-skips when the host cannot create the namespaces, matching the repository's own bwrap tests. Run `build` before the client-artifact test if `lib/client.js` does not exist yet.
 
-```yaml
-- insert:
-    - id: sandbox-linux
-      name: /absolute/path/to/deepseek-harness/new-linux-sandbox/lib/index.js
-      config:
-        read_only: [/home/me/datasets]
+The build emits declarations and JavaScript with `tsc -b`, bundles the Host entry into `lib/index.js`, and emits the Client closure factory into `lib/client.js`. Harness packages and `zod` stay external for the Host face; the Client face externalizes only the shell's platform modules.
+
+Publishing:
+
+```sh
+npm --prefix dsh-configurable-linux-sandbox run build
+cd dsh-configurable-linux-sandbox
+npm pack --dry-run
+npm publish
 ```
 
-[`scripts/link-local-deps.sh`](scripts/link-local-deps.sh) only links packages from this checkout; a packaged installation resolves its declared dependencies normally. Re-run it after moving the checkout.
+`npm publish` needs an authenticated npm account. The package name is unscoped, so no `--access` flag is required. The published payload contains `lib/index.js`, `lib/client.js`, the declaration files, `cordis.patch.yml`, `locale/*.json`, the READMEs, and the license; it never contains sources, tests, or source maps.
 
 Source map:
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry and `ctx.sandbox` provider: config, workspace/mode resolution, bwrap probe, wrap. |
-| [`src/paths.ts`](src/paths.ts) | Shape validation and physical-path resolution, including symlink policy and cross-key conflicts. |
+| [`src/index.ts`](src/index.ts) | Bundle entry: config schema and the three Host plugins. |
+| [`src/core.ts`](src/core.ts) | Mount-configuration service, projection fold, and authenticated Web route. |
+| [`src/provider.ts`](src/provider.ts) | bwrap process provider. |
+| [`src/fs.ts`](src/fs.ts) | Mount-aware filesystem provider. |
 | [`src/mounts.ts`](src/mounts.ts) | Mount planning, depth ordering, and bwrap argv rendering. |
-| [`src/session.ts`](src/session.ts) | Plugin-record declaration, projection unit, and the `setSessionMountConfig` write path. |
-| [`src/types.ts`](src/types.ts) | Public configuration and mount-plan types. |
-| [`tests/`](tests) | Unit, composition, and real-bwrap suites. |
+| [`src/paths.ts`](src/paths.ts) | Shape validation and physical-path resolution. |
+| [`src/session.ts`](src/session.ts) | Durable session record and projection definition. |
+| [`src/contract.ts`](src/contract.ts) | Shared route path and Web-view vocabulary. |
+| [`src/client/`](src/client) | Session-header action, modal form, locale dictionaries, and route client. |
+| [`cordis.patch.yml`](cordis.patch.yml) | Bundle layer: disable built-ins and insert the bundle row. |
+| [`tests/`](tests) | Unit, composition, fs, Web-route, client, and bundle suites. |
 
-## Known limitations and next phase
+## Known limitations
 
-- Linux only; one fixed bwrap runner. Custom runner argv, Landlock, Seatbelt, and Windows backends are not covered.
-- The functional bwrap probe is cached for the provider lifetime; installing or repairing bwrap requires reloading the plugin (or restarting the profile).
-- The workspace is re-mounted read-only under `read-only` (so a `forbidden` ancestor cannot hide the session cwd), which requires it to exist even in that mode. A deleted workspace fails the call.
-- Session overrides are plugin records: a build without this plugin skips them, and Session format migrations retain plugin records only best-effort, so a dropped record reverts that session to the deployment configuration. A declared in-repo session event would be required for a stronger durability promise.
-- Network, UTS, IPC, and cgroup namespaces remain shared, exactly like the built-in Linux profile.
-- The filesystem tool seam is not wired to the four keys; `read_write` widens process confinement only.
-- There is no client, host UI, or model-facing tool for session configuration in phase one; the exported write path targets host plugins.
-- The package is `private` and standalone. Installing it into a profile requires making its peer packages resolvable from that profile.
-- Moving this package into the harness workspace requires registering `plugin:new-linux-sandbox/mounts` in the production plugin-record catalog (or replacing it with a declared session event after a format review).
-- Real-namespace coverage depends on the host allowing unprivileged user namespaces; restricted hosts skip the e2e suite.
+- **`grep` and `glob` are not mount-aware.** They run ripgrep through `ctx.subprocess`, not `ctx.fs`, so a `forbidden` directory inside a searched tree can still be traversed by those two tools. The read/write/edit/list filesystem tools and all confined processes do honor the configuration.
+- **Base-backed profiles only.** The bundle disables the shipped `sandbox`/`fs-sandbox` rows; a composition that already provides `ctx.sandbox` or `ctx.fs` from another bundle conflicts at service registration.
+- **Linux and bwrap only.** Custom runner argv, Landlock, Seatbelt, and Windows are not covered. The functional probe is cached for the provider lifetime; installing or repairing bwrap requires a plugin reload or restart.
+- **Network namespaces stay shared**, exactly like the built-in Linux profile.
+- **Device access bypasses the file modes**, as described above.
+- **`forbidden` is a visibility fence, not an inode capability boundary.** A hard link or an already-open descriptor outside the fence can still reach the same data.
+- **Session overrides are plugin records.** A build without this plugin skips them, and Session format migrations retain plugin records only best-effort; a dropped record reverts that session to the deployment configuration. A declared in-repo session event would be required for a stronger durability promise.
+- **The workspace must exist in both modes.** It is re-mounted read-only under `read-only` so a `forbidden` ancestor cannot hide the session cwd; a deleted workspace fails the call.

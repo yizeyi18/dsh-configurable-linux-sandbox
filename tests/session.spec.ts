@@ -36,8 +36,8 @@ describe('sandbox mount projection', () => {
 
   it('takes the last event wholesale instead of merging keys', async () => {
     const { handle, session } = await project()
-    const first = makeDir('new-linux-sandbox-first-')
-    const second = makeDir('new-linux-sandbox-second-')
+    const first = makeDir('dsh-configurable-linux-sandbox-first-')
+    const second = makeDir('dsh-configurable-linux-sandbox-second-')
     setSessionMountConfig(session, { read_only: [first] })
     setSessionMountConfig(session, { read_write: [second] })
     expect(handle.stateOf(session)).toEqual({ config: { read_write: [second] }, invalid: null })

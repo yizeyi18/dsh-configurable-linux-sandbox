@@ -4,11 +4,11 @@
  * (for example from a session bootstrap or a host settings action).
  *
  * The override is durable: it is appended to the session log as a
- * `plugin:new-linux-sandbox/mounts` plugin record and replayed on restart.
+ * `plugin:dsh-configurable-linux-sandbox/mounts` plugin record and replayed on restart.
  */
 
 import type { Session } from '@deepseek-ai/dsh-session'
-import { setSessionMountConfig } from 'new-linux-sandbox'
+import { setSessionMountConfig } from 'dsh-configurable-linux-sandbox'
 
 /**
  * Restrict the session's view of the home tree while keeping a cache writable

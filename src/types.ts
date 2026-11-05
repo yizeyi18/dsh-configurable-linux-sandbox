@@ -2,7 +2,7 @@
  * Public types of the configurable Linux bwrap sandbox: the plugin and session
  * mount intent, plus the resolved mount plan the argv builder consumes.
  *
- * @module new-linux-sandbox/types
+ * @module dsh-configurable-linux-sandbox/types
  */
 
 /**
@@ -40,7 +40,7 @@ export interface MountConfig {
  * Plugin configuration: the deployment-wide mount intent plus runner
  * diagnostics. Every field has a schema default, so the loader may omit it.
  */
-export interface Config {
+export interface SandboxPluginConfig {
   /** Host directories exposed read-write in `workspace-write` and read-only in `read-only`. */
   read_write?: string[]
   /** Host directories exposed read-only in every mode. */

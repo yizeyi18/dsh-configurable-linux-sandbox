@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "可配置 Linux 沙箱",
+    "description": "基于 bwrap 的 Linux 沙箱：提供 read_write、read_only、forbidden、dev 四类挂载，可在 Web UI 中按会话覆盖，并让文件系统工具遵守同一配置。"
+  }
+}

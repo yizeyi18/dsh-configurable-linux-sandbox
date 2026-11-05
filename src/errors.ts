@@ -4,7 +4,7 @@
  * text. Neither error wraps a spawn: they name a configuration that cannot be
  * enforced, before bwrap starts.
  *
- * @module new-linux-sandbox/errors
+ * @module dsh-configurable-linux-sandbox/errors
  */
 
 import { HarnessError } from '@deepseek-ai/dsh-llm'
@@ -22,7 +22,7 @@ export const LINUX_SANDBOX_SESSION_UNAVAILABLE = 'LINUX_SANDBOX_SESSION_UNAVAILA
 export class LinuxSandboxConfigError extends HarnessError {
   /** @param detail - actionable description without the plugin prefix. */
   constructor(detail: string) {
-    super(`new-linux-sandbox: ${detail}`, LINUX_SANDBOX_INVALID_CONFIG)
+    super(`dsh-configurable-linux-sandbox: ${detail}`, LINUX_SANDBOX_INVALID_CONFIG)
   }
 }
 
@@ -35,7 +35,7 @@ export class LinuxSandboxSessionUnavailableError extends HarnessError {
   /** @param sessionId - the id carried by the sandbox policy. */
   constructor(sessionId: string) {
     super(
-      `new-linux-sandbox: the calling session ${JSON.stringify(sessionId)} is not live, so its mount override cannot be read`,
+      `dsh-configurable-linux-sandbox: the calling session ${JSON.stringify(sessionId)} is not live, so its mount override cannot be read`,
       LINUX_SANDBOX_SESSION_UNAVAILABLE,
     )
   }

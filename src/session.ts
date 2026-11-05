@@ -16,7 +16,7 @@
  * rather than being skipped: a security policy must fail closed instead of
  * silently falling back to a possibly wider global configuration.
  *
- * @module new-linux-sandbox/session
+ * @module dsh-configurable-linux-sandbox/session
  */
 
 import { appendPluginRecord, pluginRecordOf } from '@deepseek-ai/dsh-session'
@@ -27,7 +27,14 @@ import { normalizeMountConfig } from './paths.ts'
 import type { MountConfig } from './types.ts'
 
 /** Plugin record type carrying one complete session mount override. */
-export const SANDBOX_MOUNTS_RECORD = 'plugin:new-linux-sandbox/mounts' as const
+export const SANDBOX_MOUNTS_RECORD = 'plugin:dsh-configurable-linux-sandbox/mounts' as const
+
+/**
+ * Record type written by the phase-one prototype under its former package name.
+ * Reads fold it as a fallback so existing sessions keep their override; new
+ * writes use {@link SANDBOX_MOUNTS_RECORD}.
+ */
+export const LEGACY_SANDBOX_MOUNTS_RECORD = 'plugin:new-linux-sandbox/mounts' as const
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface PluginRecordMap {
@@ -35,6 +42,8 @@ declare module '@deepseek-ai/dsh-session/types' {
      * The session's complete Linux mount override. Log-only, never part of the
      * model transcript; the last such record wins.
      */
+    'plugin:dsh-configurable-linux-sandbox/mounts': MountConfig
+    /** Phase-one record type read for compatibility; never written. */
     'plugin:new-linux-sandbox/mounts': MountConfig
   }
 }
@@ -66,7 +75,7 @@ const stateSchema: zod.ZodType<SandboxMountOverrideState> = zod.object({
 /** Fold one committed event into the override state. */
 function applyRecord(state: SandboxMountOverrideState, event: SessionEvent): SandboxMountOverrideState {
   const record = pluginRecordOf(event)
-  if (record?.type !== SANDBOX_MOUNTS_RECORD) return state
+  if (record?.type !== SANDBOX_MOUNTS_RECORD && record?.type !== LEGACY_SANDBOX_MOUNTS_RECORD) return state
   const parsed = mountConfigSchema.safeParse(record.data)
   if (!parsed.success) {
     return Object.freeze({ config: null, invalid: parsed.error.message })
@@ -91,7 +100,7 @@ export const sandboxMountsProjection: ProjectionDefinition<typeof SANDBOX_MOUNTS
 
 /**
  * THE write path for a session's mount override: append exactly one
- * `plugin:new-linux-sandbox/mounts` record. The change applies to that
+ * `plugin:dsh-configurable-linux-sandbox/mounts` record. The change applies to that
  * session's next confined call. The input is validated and detached before it
  * reaches the log, so later caller mutation cannot rewrite the recorded
  * override.

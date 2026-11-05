@@ -1,46 +1,36 @@
-# Replace the built-in local sandbox provider with new-linux-sandbox.
+# Profile-level override for the dsh-configurable-linux-sandbox bundle.
 #
-# Prerequisites:
-#   1. Build this package:      npm --prefix new-linux-sandbox run build
-#   2. Make `new-linux-sandbox` resolvable from the profile's package tree
-#      together with its peer dependencies (@deepseek-ai/dsh-sandbox,
-#      @deepseek-ai/dsh-session, @deepseek-ai/dsh-session-projection,
-#      @deepseek-ai/dsh-llm, @deepseek-ai/cordis).
-#   3. Copy this file over (or merge it into) the profile's cordis.patch.yml.
+# The bundle's own cordis.patch.yml inserts the `configurable-sandbox` row and
+# disables the built-in `sandbox` and `fs-sandbox` rows. A patch replaces the
+# whole config of the row it targets, so restate every field you keep.
 #
-# The built-in `sandbox` row is disabled rather than renamed because a patch
-# cannot replace an entry's plugin name. The inserted row takes over the
-# `ctx.sandbox` service.
+# Install the bundle first:
+#   dsh plugin --profile <name> add dsh-configurable-linux-sandbox
+# then merge this file into that profile's cordis.patch.yml.
 
-- id: sandbox
-  disabled: true
+- id: configurable-sandbox
+  config:
+    # Extra writable directories outside the workspace. These are read-only
+    # when the session runs in `read-only` mode. Entries must be physical
+    # paths; symlinked grants are rejected.
+    read_write:
+      - /home/me/.cache/uv
+      - /home/me/projects/shared
 
-- insert:
-    - id: sandbox-linux
-      name: new-linux-sandbox
-      config:
-        # Extra writable directories outside the workspace. These are dropped
-        # to read-only when the session runs in `read-only` mode. Entries must
-        # be physical paths; symlinked grants are rejected.
-        read_write:
-          - /home/me/.cache/uv
-          - /home/me/projects/shared
+    # Extra read-only directories. These stay readable in both modes.
+    read_only:
+      - /home/me/datasets
+      - /var/log
 
-        # Extra read-only directories. These stay visible in both modes.
-        read_only:
-          - /home/me/datasets
-          - /var/log
+    # Hide these directories behind an empty tmpfs. Deeper read_only or
+    # read_write entries still re-expose their own subtrees.
+    forbidden:
+      - /home/me
 
-        # Hide these directories behind an empty tmpfs. Deeper entries above
-        # still re-expose their own subtrees.
-        forbidden:
-          - /home/me
+    # Character/block device nodes or paths under /dev exposed with
+    # --dev-bind. Device access is outside the file modes; keep this minimal.
+    dev:
+      - /dev/dri
 
-        # Character/block device nodes or paths under /dev, exposed with
-        # --dev-bind. Device access is outside the file modes; keep this list
-        # minimal.
-        dev:
-          - /dev/dri
-
-        # Positive timeout for the one functional bwrap probe.
-        probeTimeoutMs: 5000
+    # Positive timeout for the one functional bwrap probe.
+    probeTimeoutMs: 5000

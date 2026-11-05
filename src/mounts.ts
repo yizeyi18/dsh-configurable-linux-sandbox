@@ -10,7 +10,7 @@
  * `read_write`, or `dev` entry re-exposes one subtree, and it keeps the
  * workspace bind above a `forbidden` ancestor.
  *
- * @module new-linux-sandbox/mounts
+ * @module dsh-configurable-linux-sandbox/mounts
  */
 
 import type { ConfinedSandboxMode } from '@deepseek-ai/dsh-sandbox'
@@ -39,6 +39,13 @@ export interface MountPlanInput {
   workspaceRoot: string
   /** Physical mount intent already validated by {@link resolveMountConfig}. */
   config: ResolvedMountConfig
+  /**
+   * Whether `workspace-write` adds the ephemeral `/tmp` tmpfs. Process
+   * confinement wants it; the Host-side filesystem view operates on the real
+   * filesystem and leaves `/tmp` alone unless a key names it.
+   * @default true
+   */
+  includeDefaultTmpfs?: boolean
 }
 
 /** Number of path segments in one absolute path. */
@@ -84,7 +91,7 @@ export function mountEntries(input: MountPlanInput): readonly MountEntry[] {
   for (const path of input.config.forbidden) add('tmpfs', path)
   for (const path of input.config.dev) add('dev', path)
   add(writeKind, input.workspaceRoot)
-  if (input.mode === 'workspace-write' && !byPath.has('/tmp')) add('tmpfs', '/tmp')
+  if ((input.includeDefaultTmpfs ?? true) && input.mode === 'workspace-write' && !byPath.has('/tmp')) add('tmpfs', '/tmp')
 
   entries.sort((left, right) => {
     const difference = depth(left.path) - depth(right.path)
@@ -118,7 +125,7 @@ export function bwrapProfileArgs(entries: readonly MountEntry[]): string[] {
         break
       default: {
         const unknown: never = entry.kind
-        throw new Error(`new-linux-sandbox: unknown mount kind ${String(unknown)}`)
+        throw new Error(`dsh-configurable-linux-sandbox: unknown mount kind ${String(unknown)}`)
       }
     }
   }

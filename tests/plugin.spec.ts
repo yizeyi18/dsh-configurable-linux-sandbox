@@ -13,13 +13,17 @@ import { SANDBOX_UNAVAILABLE } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import SessionStore, { appendPluginRecord, SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
-import LinuxBwrapSandboxProvider, {
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import {
   LINUX_SANDBOX_SESSION_UNAVAILABLE,
   LinuxSandboxConfigError,
   SANDBOX_MOUNTS_RECORD,
   setSessionMountConfig,
 } from '../src/index.ts'
 import type { Config } from '../src/index.ts'
+import { ConfigurableSandboxCore } from '../src/core.ts'
+import { MountAwareFileSystem } from '../src/fs.ts'
+import { LinuxBwrapSandboxProvider } from '../src/provider.ts'
 import { cleanupDirs, makeDir, mountProvider } from './support.ts'
 import type { ProviderBench } from './support.ts'
 
@@ -74,7 +78,7 @@ function hasTmpfs(args: readonly string[], path: string): boolean {
 
 describe('global mount configuration', () => {
   it('wraps the isolation prefix and every configured mount for workspace-write', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const readWrite = realpathSync(makeDir())
     const readOnly = realpathSync(makeDir())
     const forbidden = realpathSync(makeDir())
@@ -101,7 +105,7 @@ describe('global mount configuration', () => {
   })
 
   it('downgrades read_write grants under read-only and drops the ephemeral /tmp', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const readWrite = realpathSync(makeDir())
     const { provider } = await mount({ read_write: [readWrite] })
 
@@ -137,7 +141,7 @@ describe('global mount configuration', () => {
   })
 
   it('reports a mount-plan conflict as a config error before probing the runner', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const { provider } = await mount({ forbidden: [workspace] })
     provider.internals.probeBwrap = () => false
     await expect(provider.confine(['true'], policy(workspace))).rejects.toBeInstanceOf(LinuxSandboxConfigError)
@@ -152,7 +156,7 @@ describe('global mount configuration', () => {
 
 describe('session mount configuration', () => {
   it('overrides a global key for its own session only', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const globalReadOnly = realpathSync(makeDir())
     const sessionReadOnly = realpathSync(makeDir())
     const { ctx, provider } = await mount({ read_only: [globalReadOnly] })
@@ -168,7 +172,7 @@ describe('session mount configuration', () => {
   })
 
   it('inherits global keys the session override omits', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const globalReadOnly = realpathSync(makeDir())
     const sessionReadWrite = realpathSync(makeDir())
     const { ctx, provider } = await mount({ read_only: [globalReadOnly] })
@@ -182,7 +186,7 @@ describe('session mount configuration', () => {
   })
 
   it('treats an explicit empty list as clearing that global key', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const globalReadWrite = realpathSync(makeDir())
     const { ctx, provider } = await mount({ read_write: [globalReadWrite] })
     const session = ctx.sessions.create()
@@ -194,7 +198,7 @@ describe('session mount configuration', () => {
   })
 
   it('restores the global configuration after an empty override', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const globalReadOnly = realpathSync(makeDir())
     const { ctx, provider } = await mount({ read_only: [globalReadOnly] })
     const session = ctx.sessions.create()
@@ -210,24 +214,27 @@ describe('session mount configuration', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: makeDir() })
     const session = ctx.sessions.create()
     const recorded = realpathSync(makeDir())
     setSessionMountConfig(session, { read_only: [recorded] })
-    await ctx.plugin(LinuxBwrapSandboxProvider, {})
+    await ctx.plugin(ConfigurableSandboxCore, {})
+    await ctx.plugin(LinuxBwrapSandboxProvider)
+    await ctx.plugin(MountAwareFileSystem)
     const provider = ctx.sandbox as LinuxBwrapSandboxProvider
     provider.internals.probeBwrap = () => true
     benches.push({ ctx, provider })
 
     const args = profile((await provider.confine(
       ['true'],
-      policy(realpathSync(makeDir('new-linux-sandbox-ws-')), 'workspace-write', session.id),
+      policy(realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-')), 'workspace-write', session.id),
     )).argv)
 
     expect(hasMount(args, '--ro-bind', recorded)).toBe(true)
   })
 
   it('keeps concurrent sessions on their own overrides', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const first = realpathSync(makeDir())
     const second = realpathSync(makeDir())
     const { ctx, provider } = await mount()
@@ -253,7 +260,7 @@ describe('session mount configuration', () => {
   })
 
   it('fails closed when the session log carries a malformed mount record', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const { ctx, provider } = await mount()
     const session = ctx.sessions.create()
     // Durable-boundary injection; the typed write path cannot produce this.
@@ -264,7 +271,7 @@ describe('session mount configuration', () => {
   })
 
   it('rejects a session read_write grant behind a symlink at call time', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const target = realpathSync(makeDir())
     const link = join(makeDir(), 'link')
     symlinkSync(target, link)
@@ -279,7 +286,7 @@ describe('session mount configuration', () => {
 
 describe('policy extra writable roots', () => {
   it('grants them under workspace-write and ignores them under read-only', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const extra = realpathSync(makeDir())
     const { provider } = await mount()
 
@@ -292,7 +299,7 @@ describe('policy extra writable roots', () => {
   })
 
   it('rejects an extra root that contradicts a forbidden entry', async () => {
-    const workspace = realpathSync(makeDir('new-linux-sandbox-ws-'))
+    const workspace = realpathSync(makeDir('dsh-configurable-linux-sandbox-ws-'))
     const extra = realpathSync(makeDir())
     const { provider } = await mount({ forbidden: [extra] })
 
@@ -307,7 +314,8 @@ describe('plugin lifecycle', () => {
     try {
       await ctx.plugin(SessionStore)
       await ctx.plugin(SessionProjectionRegistry)
-      await expect(ctx.plugin(LinuxBwrapSandboxProvider, { read_only: [join(makeDir(), 'missing')] }))
+      await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: makeDir() })
+      await expect(ctx.plugin(ConfigurableSandboxCore, { read_only: [join(makeDir(), 'missing')] }))
         .rejects.toBeInstanceOf(LinuxSandboxConfigError)
     } finally {
       await ctx.fiber.dispose()
@@ -319,7 +327,8 @@ describe('plugin lifecycle', () => {
     try {
       await ctx.plugin(SessionStore)
       await ctx.plugin(SessionProjectionRegistry)
-      await expect(ctx.plugin(LinuxBwrapSandboxProvider, { probeTimeoutMs: 0 }))
+      await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: makeDir() })
+      await expect(ctx.plugin(ConfigurableSandboxCore, { probeTimeoutMs: 0 }))
         .rejects.toThrow(/positive finite/)
     } finally {
       await ctx.fiber.dispose()
