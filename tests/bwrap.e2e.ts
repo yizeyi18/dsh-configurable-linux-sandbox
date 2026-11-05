@@ -46,7 +46,11 @@ async function run(provider: LinuxBwrapSandboxProvider, command: string, policy:
   const confined = await provider.confine(['bash', '-c', command], policy)
   const program = confined.argv[0]
   if (program === undefined) throw new Error('confined argv is empty')
-  const result = spawnSync(program, confined.argv.slice(1), { timeout: 30_000, encoding: 'utf8' })
+  const result = spawnSync(program, confined.argv.slice(1), {
+    timeout: 30_000,
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
+  })
   return { result, confined }
 }
 
