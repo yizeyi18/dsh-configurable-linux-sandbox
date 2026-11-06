@@ -1,82 +1,40 @@
 {
-  "extends": "../tsconfig.base.json",
+  // Standalone project: the plugin type-checks against the installed
+  // @deepseek-ai packages (the npm devDependencies, or checkout links created
+  // by `npm run link`), never against a DSH source tree's sibling layout.
   "compilerOptions": {
-    "jsx": "react-jsx",
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": [
+      "node"
+    ],
     "lib": [
       "ES2024",
       "DOM",
       "DOM.Iterable",
       "ESNext.Disposable"
     ],
+    "jsx": "react-jsx",
     "rootDir": "src",
     "outDir": "lib/types"
   },
   "include": [
     "src"
-  ],
-  "references": [
-    {
-      "path": "../vendor/cordis"
-    },
-    {
-      "path": "../vendor/schemastery"
-    },
-    {
-      "path": "../packages/llm/llm"
-    },
-    {
-      "path": "../packages/sandbox/sandbox"
-    },
-    {
-      "path": "../packages/sandbox/sandbox-policy"
-    },
-    {
-      "path": "../packages/core/session"
-    },
-    {
-      "path": "../packages/core/agent"
-    },
-    {
-      "path": "../packages/session/session-projection"
-    },
-    {
-      "path": "../packages/fs/fs"
-    },
-    {
-      "path": "../packages/fs/fs-local"
-    },
-    {
-      "path": "../packages/fs/fs-sandbox"
-    },
-    {
-      "path": "../packages/client/connection/tsconfig.host.json"
-    },
-    {
-      "path": "../packages/client/connection/tsconfig.client.json"
-    },
-    {
-      "path": "../packages/client/locale/tsconfig.host.json"
-    },
-    {
-      "path": "../packages/client/locale/tsconfig.client.json"
-    },
-    {
-      "path": "../packages/client/ui-slots"
-    },
-    {
-      "path": "../packages/client/ui-primitives"
-    },
-    {
-      "path": "../packages/client/ui-renderer"
-    },
-    {
-      "path": "../packages/client/ui-session"
-    },
-    {
-      "path": "../packages/client/ui-conversation/tsconfig.host.json"
-    },
-    {
-      "path": "../packages/client/ui-conversation/tsconfig.client.json"
-    }
   ]
 }

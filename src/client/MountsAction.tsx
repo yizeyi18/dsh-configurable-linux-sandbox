@@ -230,7 +230,10 @@ export function MountsAction(props: MountsActionProps) {
                 onChange={(next) => { toggleOverride(key, next) }}
                 label={t('override')}
                 disabled={busy}
-                modalAutofocus={key === 'read_write'}
+                // The published rc types predate this prop; spreading keeps the
+                // modal's initial focus on a checkout that has it without
+                // requiring every installed DSH to.
+                {...key === 'read_write' ? { modalAutofocus: true } : {}}
               />
             </div>
             <p style={hintStyle}>{t(HINTS[key])}</p>

@@ -5,6 +5,7 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { load } from 'js-yaml'
@@ -12,7 +13,13 @@ import { applyEntryPatches, entryListSchema } from '@deepseek-ai/cordis-plugin-i
 import { satisfies } from 'semver'
 
 const root = join(import.meta.dirname, '..')
-const checkout = join(root, '..')
+const require = createRequire(import.meta.url)
+
+/** The shipped base layer this bundle composes over, resolved from the installed package. */
+const basePatch = require.resolve('@deepseek-ai/dsh-base/cordis.patch.yml')
+
+/** The DSH version the development dependencies pin, the same package line `engines.dsh` names. */
+const runtimeVersion = (require('@deepseek-ai/dsh-app-boot/package.json') as { version: string }).version
 
 function readYaml(path: string): unknown {
   return load(readFileSync(path, 'utf8'), { schema: entryListSchema })
@@ -35,11 +42,10 @@ describe('bundle manifest', () => {
 
   it('targets the running DSH version through engines.dsh and its dsh peers', () => {
     const pkg = manifest()
-    const runtime = JSON.parse(readFileSync(join(checkout, 'packages/boot/app-boot/package.json'), 'utf8')).version as string
-    expect(satisfies(runtime, pkg.engines.dsh, { includePrerelease: true })).toBe(true)
+    expect(satisfies(runtimeVersion, pkg.engines.dsh, { includePrerelease: true })).toBe(true)
     for (const [name, range] of Object.entries(pkg.peerDependencies as Record<string, string>)) {
       if (!name.startsWith('@deepseek-ai/dsh')) continue
-      expect(satisfies(runtime, range, { includePrerelease: true }), name).toBe(true)
+      expect(satisfies(runtimeVersion, range, { includePrerelease: true }), name).toBe(true)
     }
   })
 })
@@ -49,7 +55,7 @@ describe('bundle patch composition', () => {
     const warnings: string[] = []
     const base = applyEntryPatches(
       [],
-      readYaml(join(checkout, 'packages/bundle/base/cordis.patch.yml')) as never[],
+      readYaml(basePatch) as never[],
       (format: string, ...args: unknown[]) => { warnings.push(`${format} ${args.join(' ')}`) },
     )
     const rows = applyEntryPatches(
@@ -67,7 +73,7 @@ describe('bundle patch composition', () => {
 
   it('has no duplicate top-level row ids after composition', () => {
     const warnings: string[] = []
-    const base = applyEntryPatches([], readYaml(join(checkout, 'packages/bundle/base/cordis.patch.yml')) as never[], () => {})
+    const base = applyEntryPatches([], readYaml(basePatch) as never[], () => {})
     const rows = applyEntryPatches(base, readYaml(join(root, 'cordis.patch.yml')) as never[], (format: string, ...args: unknown[]) => {
       warnings.push(`${format} ${args.join(' ')}`)
     })
