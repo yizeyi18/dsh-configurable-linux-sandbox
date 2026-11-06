@@ -1,6 +1,6 @@
 {
   "name": "dsh-configurable-linux-sandbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Configurable Linux bwrap sandbox bundle for DeepSeek Harness: read_write/read_only/forbidden/dev mounts, per-session overrides, mount-aware filesystem tools, and a Web UI",
   "keywords": [
     "deepseek-harness",
