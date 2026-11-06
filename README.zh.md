@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-一个仅面向 Linux 的 DeepSeek Harness bundle，用一对懂挂载的沙箱替换内置的进程沙箱和文件系统沙箱。先做一次部署级配置，之后可在 Web UI 中按会话覆盖。
+一个 Linux-only 的可配置 DeepSeek Harness 沙箱实现。
 
 <del>作者又想GPU直通又不想开full access，怒而蹬大肥鱼 v41f 1017写出了这个</del>
 

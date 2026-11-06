@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-A Linux-only DeepSeek Harness bundle that replaces the built-in process and filesystem sandboxes with one mount-aware pair. Configure it once per deployment and override it per session from the Web UI.
+A configurable Linux-only DeepSeek Harness Sandbox implementation.
 
 | Key | Meaning |
 |---|---|
