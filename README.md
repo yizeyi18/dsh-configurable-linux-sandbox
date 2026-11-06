@@ -40,7 +40,7 @@ From npm, after the package is published:
 dsh plugin --profile web add dsh-configurable-linux-sandbox
 ```
 
-Restart the profile. The bundle layer is appended after the base and Web layers, so its patch disables `sandbox` and `fs-sandbox` and inserts the `configurable-sandbox` row. Turn the whole bundle off to restore the built-ins; disabling only the inserted row leaves the profile without a process or filesystem provider.
+The bundle layer is appended after the base and Web layers, so its patch disables `sandbox` and `fs-sandbox` and inserts the `configurable-sandbox` row. Enabling the bundle from the Web **Plugins** page applies that generation live, without a session restart: the bundle row first waits for the shipped providers' asynchronous unload to release `ctx.sandbox` and `ctx.fs`, then registers its own. A profile that does not run a live patch reload takes the change at its next start.
 
 For development from this checkout, build and install the package into a profile as a local link:
 
@@ -185,7 +185,7 @@ npm --prefix dsh-configurable-linux-sandbox run test
 npm --prefix dsh-configurable-linux-sandbox run build
 ```
 
-`test` runs unit, Cordis-composition, filesystem-enforcement, Web-route, client-render, and bundle-composition suites plus a real-bwrap e2e suite. The e2e suite self-skips when the host cannot create the namespaces, matching the repository's own bwrap tests. Run `build` before the client-artifact test if `lib/client.js` does not exist yet.
+`test` runs unit, Cordis-composition, live-activation, filesystem-enforcement, Web-route, client-render, and bundle-composition suites plus a real-bwrap e2e suite. The e2e suite self-skips when the host cannot create the namespaces, matching the repository's own bwrap tests. Run `build` before the client-artifact test if `lib/client.js` does not exist yet.
 
 The build emits declarations and JavaScript with `tsc -b`, bundles the Host entry into `lib/index.js`, and emits the Client closure factory into `lib/client.js`. Harness packages and `zod` stay external for the Host face; the Client face externalizes only the shell's platform modules.
 
@@ -208,6 +208,7 @@ Source map:
 | [`src/core.ts`](src/core.ts) | Mount-configuration service, projection fold, and authenticated Web route. |
 | [`src/provider.ts`](src/provider.ts) | bwrap process provider. |
 | [`src/fs.ts`](src/fs.ts) | Mount-aware filesystem provider. |
+| [`src/release.ts`](src/release.ts) | Live-activation wait for the providers this bundle replaces. |
 | [`src/mounts.ts`](src/mounts.ts) | Mount planning, depth ordering, and bwrap argv rendering. |
 | [`src/paths.ts`](src/paths.ts) | Shape validation and physical-path resolution. |
 | [`src/session.ts`](src/session.ts) | Durable session record and projection definition. |
@@ -219,7 +220,7 @@ Source map:
 ## Known limitations
 
 - **`grep` and `glob` are not mount-aware.** They run ripgrep through `ctx.subprocess`, not `ctx.fs`, so a `forbidden` directory inside a searched tree can still be traversed by those two tools. The read/write/edit/list filesystem tools and all confined processes do honor the configuration.
-- **Base-backed profiles only.** The bundle disables the dsh-shipped `sandbox`/`fs-sandbox`; a composition that already provides `ctx.sandbox` or `ctx.fs` from another bundle conflicts at service registration.
+- **Base-backed profiles only.** The bundle disables the dsh-shipped `sandbox`/`fs-sandbox`; a composition that already provides `ctx.sandbox` or `ctx.fs` from another bundle conflicts at service registration. Live activation waits out the shipped providers it replaces, but an active third-party provider of either name fails activation with `LINUX_SANDBOX_PROVIDER_CONFLICT` instead of being replaced.
 - **Linux and bwrap only.** Custom runner argv, Landlock, Seatbelt, and Windows are not covered. The functional probe is cached for the provider lifetime; installing or repairing bwrap requires a plugin reload or restart.
 - **Device access bypasses the file modes**, as described by [Isolation and security notes](#isolation-and-security-notes).
 - **`forbidden` is a visibility fence, not an inode capability boundary.** A hard link or an already-open descriptor outside the fence can still reach the same data.

@@ -42,7 +42,7 @@
 dsh plugin --profile web add dsh-configurable-linux-sandbox
 ```
 
-重启 profile。bundle 层位于 base 和 Web 层之后，因此其 patch 会停用 `sandbox` 与 `fs-sandbox` 并插入 `configurable-sandbox` 行。若要恢复自带 provider，请关闭整个 bundle；只关闭插入的行会让 profile 失去进程和文件系统 provider。
+bundle 层位于 base 和 Web 层之后，因此其 patch 会停用 `sandbox` 与 `fs-sandbox` 并插入 `configurable-sandbox` 行。从 Web **插件** 页启用 bundle 会在当前会话内直接应用这一代组合，无需重启：bundle 行会先等待自带 provider 的异步卸载释放 `ctx.sandbox` 和 `ctx.fs`，再注册自己的实现。未启用实时 patch 重载的 profile 会在下次启动时生效。
 
 从本 checkout 开发时，构建后以本地链接安装到 profile：
 
@@ -187,7 +187,7 @@ npm --prefix dsh-configurable-linux-sandbox run test
 npm --prefix dsh-configurable-linux-sandbox run build
 ```
 
-`test` 运行单元、Cordis 组合、文件系统约束、Web 路由、客户端渲染和 bundle 组合测试，外加真实 bwrap e2e 测试。宿主无法创建命名空间时 e2e 自动跳过，与仓库自带的 bwrap 测试策略一致。如果 `lib/client.js` 尚不存在，请先运行 `build`，再运行客户端产物测试。
+`test` 运行单元、Cordis 组合、实时启用、文件系统约束、Web 路由、客户端渲染和 bundle 组合测试，外加真实 bwrap e2e 测试。宿主无法创建命名空间时 e2e 自动跳过，与仓库自带的 bwrap 测试策略一致。如果 `lib/client.js` 尚不存在，请先运行 `build`，再运行客户端产物测试。
 
 构建先用 `tsc -b` 生成声明和 JavaScript，再把 Host 入口打包为 `lib/index.js`，把 Client 闭包工厂生成为 `lib/client.js`。Host face 将 Harness 包和 `zod` 保持 external；Client face 只外置 shell 的平台模块。
 
@@ -210,6 +210,7 @@ npm publish
 | [`src/core.ts`](src/core.ts) | 挂载配置服务、projection 折叠和认证 Web 路由。 |
 | [`src/provider.ts`](src/provider.ts) | bwrap 进程 provider。 |
 | [`src/fs.ts`](src/fs.ts) | 懂挂载的文件系统 provider。 |
+| [`src/release.ts`](src/release.ts) | 实时启用时等待本 bundle 替换掉的 provider 卸载。 |
 | [`src/mounts.ts`](src/mounts.ts) | 挂载规划、深度排序和 bwrap argv 渲染。 |
 | [`src/paths.ts`](src/paths.ts) | 形状校验和物理路径解析。 |
 | [`src/session.ts`](src/session.ts) | 持久会话记录与 projection 定义。 |
@@ -221,7 +222,7 @@ npm publish
 ## 已知限制
 
 - **`grep` 和 `glob` 尚未接入挂载配置。** 它们通过 `ctx.subprocess` 运行 ripgrep，而不是 `ctx.fs`，因此搜索树内的 `forbidden` 目录仍可能被这两个工具遍历。读写、编辑、列表等文件系统工具和所有受限进程会遵守配置。
-- **仅支持基于 base 的 profile。** bundle 停用dsh自带的 `sandbox`/`fs-sandbox`；如果组合已由另一个 bundle 提供 `ctx.sandbox` 或 `ctx.fs`，服务注册时会有冲突。
+- **仅支持基于 base 的 profile。** bundle 停用dsh自带的 `sandbox`/`fs-sandbox`；如果组合已由另一个 bundle 提供 `ctx.sandbox` 或 `ctx.fs`，服务注册时会有冲突。实时启用会等待被替换的自带 provider 完成卸载；但如果这两个名称仍由另一个活跃的第三方 provider 提供，启用会以 `LINUX_SANDBOX_PROVIDER_CONFLICT` 失败，而不会替换它。
 - **仅 Linux + bwrap。** 未覆盖自定义 runner argv、Landlock、Seatbelt 或 Windows。功能探测结果在 provider 生命周期内缓存；安装或修复 bwrap 后需要重新加载插件或重启。
 - **设备访问绕过文件模式**，如 [隔离与安全说明](#隔离与安全说明) 所述。
 - **`forbidden` 是可见性围栏，不是 inode 能力边界。** 围栏之外的同 inode 硬链接或已打开文件描述符仍可访问同一数据。
