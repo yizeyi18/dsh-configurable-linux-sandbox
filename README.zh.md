@@ -221,10 +221,8 @@ npm publish
 ## 已知限制
 
 - **`grep` 和 `glob` 尚未接入挂载配置。** 它们通过 `ctx.subprocess` 运行 ripgrep，而不是 `ctx.fs`，因此搜索树内的 `forbidden` 目录仍可能被这两个工具遍历。读写、编辑、列表等文件系统工具和所有受限进程会遵守配置。
-- **仅支持基于 base 的 profile。** bundle 停用自带的 `sandbox`/`fs-sandbox` 行；如果组合已由另一个 bundle 提供 `ctx.sandbox` 或 `ctx.fs`，会在服务注册时冲突。
+- **仅支持基于 base 的 profile。** bundle 停用dsh自带的 `sandbox`/`fs-sandbox`；如果组合已由另一个 bundle 提供 `ctx.sandbox` 或 `ctx.fs`，服务注册时会有冲突。
 - **仅 Linux + bwrap。** 未覆盖自定义 runner argv、Landlock、Seatbelt 或 Windows。功能探测结果在 provider 生命周期内缓存；安装或修复 bwrap 后需要重新加载插件或重启。
-- **网络 namespace 仍共享**，与自带 Linux profile 一致。
-- **设备访问绕过文件模式**，如上所述。
+- **设备访问绕过文件模式**，如 [隔离与安全说明](#隔离与安全说明) 所述。
 - **`forbidden` 是可见性围栏，不是 inode 能力边界。** 围栏之外的同 inode 硬链接或已打开文件描述符仍可访问同一数据。
 - **会话覆盖是插件记录。** 没有本插件的构建会跳过它们，Session 格式迁移只会尽力保留插件记录；记录丢失后该会话会回退到部署配置。若要更强的持久性保证，需要把事件声明进仓库内的会话事件格式。
-- **两种模式下 workspace 都必须存在。** `read-only` 下仍会以只读方式重新挂载 workspace，避免 `forbidden` 祖先遮住会话 cwd；workspace 被删除时调用会失败。

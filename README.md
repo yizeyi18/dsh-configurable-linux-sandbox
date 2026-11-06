@@ -219,10 +219,8 @@ Source map:
 ## Known limitations
 
 - **`grep` and `glob` are not mount-aware.** They run ripgrep through `ctx.subprocess`, not `ctx.fs`, so a `forbidden` directory inside a searched tree can still be traversed by those two tools. The read/write/edit/list filesystem tools and all confined processes do honor the configuration.
-- **Base-backed profiles only.** The bundle disables the shipped `sandbox`/`fs-sandbox` rows; a composition that already provides `ctx.sandbox` or `ctx.fs` from another bundle conflicts at service registration.
+- **Base-backed profiles only.** The bundle disables the dsh-shipped `sandbox`/`fs-sandbox`; a composition that already provides `ctx.sandbox` or `ctx.fs` from another bundle conflicts at service registration.
 - **Linux and bwrap only.** Custom runner argv, Landlock, Seatbelt, and Windows are not covered. The functional probe is cached for the provider lifetime; installing or repairing bwrap requires a plugin reload or restart.
-- **Network namespaces stay shared**, exactly like the built-in Linux profile.
-- **Device access bypasses the file modes**, as described above.
+- **Device access bypasses the file modes**, as described by [Isolation and security notes](#isolation-and-security-notes).
 - **`forbidden` is a visibility fence, not an inode capability boundary.** A hard link or an already-open descriptor outside the fence can still reach the same data.
 - **Session overrides are plugin records.** A build without this plugin skips them, and Session format migrations retain plugin records only best-effort; a dropped record reverts that session to the deployment configuration. A declared in-repo session event would be required for a stronger durability promise.
-- **The workspace must exist in both modes.** It is re-mounted read-only under `read-only` so a `forbidden` ancestor cannot hide the session cwd; a deleted workspace fails the call.
