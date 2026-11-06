@@ -31,8 +31,8 @@
 
 - Linux（`process.platform === 'linux'`）；bundle 声明了 `dsh.bundle.platforms: ["linux"]`，其他宿主会跳过该层并保留自带 provider。
 - 基于 base 的 Harness profile（`web`、`headless`、`sdk` 或 `acp`）。bundle 的 patch 会停用自带的 `sandbox` 和 `fs-sandbox` 行并插入自己的行；不要把它装进已经挂载了另一个 `ctx.sandbox` 或 `ctx.fs` provider 的组合。
-- `PATH` 中有可创建命名空间的 `bwrap`。每个 provider 生命周期只做一次功能探测；bwrap 不可用时以 `SANDBOX_UNAVAILABLE` 失败关闭。
-- DeepSeek Harness `^0.2.2-rc.1`（由 `engines.dsh` 和 DSH peer 范围共同约束）。
+- `PATH` 中有可创建命名空间的 `bwrap`。bwrap 不可用时以 `SANDBOX_UNAVAILABLE` 失败关闭。
+- DeepSeek Harness `^0.2.2-rc.1`。
 
 ## 安装
 

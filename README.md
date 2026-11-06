@@ -29,8 +29,8 @@ The deployment config lives on the bundle's one plugin row. Every session can ov
 
 - Linux (`process.platform === 'linux'`); the bundle declares `dsh.bundle.platforms: ["linux"]`, so other hosts skip it and keep the built-in providers.
 - A base-backed Harness profile (`web`, `headless`, `sdk`, or `acp`). The bundle's patch disables the shipped `sandbox` and `fs-sandbox` rows and inserts its own row; do not install it into a composition that already mounts another `ctx.sandbox` or `ctx.fs` provider.
-- `bwrap` on `PATH` with permission to create its namespaces. A functional probe runs once per provider lifetime; an unusable bwrap fails closed with `SANDBOX_UNAVAILABLE`.
-- DeepSeek Harness `^0.2.2-rc.1` (enforced by `engines.dsh` and the DSH peer ranges).
+- `bwrap` on `PATH` with permission to create its namespaces. An unusable bwrap fails closed with `SANDBOX_UNAVAILABLE`.
+- DeepSeek Harness `^0.2.2-rc.1`.
 
 ## Install
 
